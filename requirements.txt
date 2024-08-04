@@ -1,0 +1,3 @@
+sentence-transformers
+opensearch-py
+python-dotenv
