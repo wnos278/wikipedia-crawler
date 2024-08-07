@@ -14,7 +14,7 @@ class IndexDocument:
                                port=os.getenv('PORT'), 
                                username=os.getenv('USERNAME'), 
                                password=os.getenv('PASSWORD'))
-        # self.embed_model = Embedding() 
+        self.embed_model = Embedding() 
 
         
     def chunk_document(self):
@@ -26,8 +26,9 @@ class IndexDocument:
         return chunks
 
     def index_document(self, document):
-        id = "" 
+        id = document["_id"]
         body = {
+            'title': document['title'],
             'link': document['link'],
             'content': document['content']
             }

@@ -2,15 +2,24 @@ import time     #For Delay
 import urllib.request    #Extracting web pages
 import re
 from src.index import * 
+from bs4 import BeautifulSoup
+from src.data import Post
+import json
+# from src.opensearchlib import *
+import hashlib
+import os
+from datetime import datetime
 
-
-index_document = IndexDocument() 
+# index_document = IndexDocument() 
 
 #Defining pages
 starting_page = "https://en.wikipedia.org/wiki/Spacetime"
 seed_page = "https://en.wikipedia.org"  #Crawling the English Wikipedia
 
-
+def hash_sha256(input_string):
+    sha256 = hashlib.sha256()
+    sha256.update(input_string.encode('utf-8'))
+    return sha256.hexdigest()
 #Downloading entire Web Document (Raw Page Content)
 def download_page(url):
     try:
@@ -54,18 +63,11 @@ def extract_see_also(page):
 
 #Extract just the Introduction part of the page
 def extract_introduction(page):
-    start_introduction = page.find("<p>")
-    stop_introduction = page.find('<div id="toctitle">', start_introduction + 1)
-    
-    #If the page onl has introduction
-    if '<div id="toctitle">' not in page:
-        stop_introduction = page.find('</p>', start_introduction + 1)
-    else:
-        pass
-    
-    
-    raw_introduction = page[start_introduction : stop_introduction]
-    return raw_introduction
+    links = []
+    soup = BeautifulSoup(page, 'html.parser')
+    title = soup.find('h1').text
+    content = soup.find('div',{'id':'mw-content-text'}).text
+    return title,content
 
 
 
@@ -82,8 +84,17 @@ def get_next_link(s):
         end_quote = s.find('"',start_quote+1)
         link = str(s[start_quote+1:end_quote])
         return link, end_quote
-          
-
+def get_linkk(page):         
+    start_introduction = page.find("<p>")
+    stop_introduction = page.find('<div id="toctitle">', start_introduction + 1)
+    
+    #If the page onl has introduction
+    if '<div id="toctitle">' not in page:
+        stop_introduction = page.find('</p>', start_introduction + 1)
+    else:
+        pass
+    raw_introduction = page[start_introduction : stop_introduction]
+    return raw_introduction
 #Getting all links with the help of 'get_next_links'
 def get_all_links(page):
     links = []
@@ -176,17 +187,18 @@ database = {}   #Create a dictionary
 
 #Main Crawl function that calls all the above function and crawls the entire site sequentially
 def web_crawl():  
+    post=Post()
     to_crawl = [starting_page]      #Define list name 'Seed Page'
     #print(to_crawl)
     crawled=[]      #Define list name 'Seed Page'
-    #database = {}   #Create a dictionary
-    #k = 0;
+    database = {}   #Create a dictionary
+    k = 0
     for k in range(0, 3):
         i=0        #Initiate Variable to count No. of Iterations
         while i<3:     #Continue Looping till the 'to_crawl' list is not empty
             urll = to_crawl.pop(0)      #If there are elements in to_crawl then pop out the first element
             urll,flag = url_parse(urll)
-            print(urll)
+            # print(urll)
             flag2 = extension_scan(urll)
             time.sleep(3)
             
@@ -198,31 +210,21 @@ def web_crawl():
                 if urll in crawled:     #Else check if the URL is already crawled
                     pass        #Do Nothing
                 else:       #If the URL is not already crawled, then crawl i and extract all the links from it
-                    print("Link = " + urll)
-                    
-                    
-                    extract_data(urll) 
-                    
-                    
-                    raw_introduction = extract_introduction(raw_html)
-                    #print("Raw Introduction = " + raw_introduction)
-                    
+                    post._id = hash_sha256(urll)
+                    post.link = urll
+                    raw_html = download_page(urll)
+                    raw_introduction = get_linkk(raw_html)
+                    post.title,post.content = extract_introduction(raw_html)
                     to_crawl = to_crawl + get_all_links(raw_introduction)
                     crawled.append(urll)
+                    current_date = datetime.now().strftime("%Y-%m-%d")
+                    if not os.path.exists(current_date):
+                        os.makedirs(current_date)
+                    file_path = os.path.join(current_date, f"{post._id}.json")
                     
-                    pure_introduction = extract_pure_introduction(raw_introduction)
-                    # print("Introduction = " + pure_introduction.replace('   ',' '))
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        json.dump(post.__dict__, f, ensure_ascii=False, indent=4)
                     
-                    database [title] = pure_introduction        #Add title and its introduction to the dict
-                    
-                    #Writing the output data into a text file
-                    file = open('database.txt', 'a')        #Open the text file called database.txt
-                    file.write(title + ": " + "\n")         #Write the title of the page
-                    file.write(pure_introduction + "\n\n")      #write the introduction of that page
-                    file.close()                            #Close the file
-                    
-    
-                    #Remove duplicated from to_crawl
                     n = 1
                     j = 0
                     #k = 0
@@ -237,27 +239,45 @@ def web_crawl():
     return ""
 
 def extract_data(data_link):
-    data = {}
-    
-
-    # Lấy thông tin content 
-    content = "" 
-    title = "" 
-
-    data['link'] = data_link 
-    data['content'] = content 
-    data['title'] = title
-    return data  
+    log_file = "log.txt"
+    with open(log_file, 'r') as f:
+        logged_pages = f.read().splitlines()
+    for page in data_link:
+        post=Post()
+        urll = "https://vi.wikipedia.org/"+page  
+        if urll in logged_pages:
+            continue  
+        post._id = hash_sha256(urll)
+        post.link = urll
+        raw_html = download_page(urll)
+        raw_introduction = get_linkk(raw_html)
+        post.title,post.content = extract_introduction(raw_html)
+        to_crawl = to_crawl + get_all_links(raw_introduction)
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        if not os.path.exists(current_date):
+            os.makedirs(current_date)
+        file_path = os.path.join(current_date, f"{post._id}.json")
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(post.__dict__, f, ensure_ascii=False, indent=4)
+        with open(log_file, 'a') as log_f:
+            log_f.write(f"{urll}\n")
 
 def extract_list_data(raw_html):
-    # NOTE: Phân tích trang hiện tại để lấy toàn bộ link 
-    links = []
+    list= []
+    soupp = BeautifulSoup(raw_html, 'html.parser')
+    list_link = soupp.find('div', class_ ="mw-allpages-body")
+    links = list_link.find_all('a')
+    for link in links:
+        list.append(link.get('href'))
+    return list
 
-    return links 
-
-def extract_next_link():
-    next_link = "" 
-    return next_link 
+def extract_next_link(raw_html):
+    soupp = BeautifulSoup(raw_html, 'html.parser')
+    link_next_page = soupp.find('div', class_ ="mw-allpages-nav")
+    link_next_page = link_next_page.find_all('a')
+    link_next_page = link_next_page[-1].get('href')
+    link_next_page = "https://vi.wikipedia.org"+link_next_page 
+    return link_next_page 
 
 def get_seeds():
     f = open(os.getenv('SEED_FILE'), 'r', encoding='utf8') 

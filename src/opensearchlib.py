@@ -27,7 +27,10 @@ class OpenSearchDB:
             ssl_show_warn = False,
         )
         body = {"mappings": {"dynamic": "true"}}
+        is_existed = self.client.indices.exists(index=self.index_name)
+        print(is_existed)
         try:
+            
             self.client.indices.get(index=self.index_name)
         except:
             self.client.indices.create(index=self.index_name, body=body)
